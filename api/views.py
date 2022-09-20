@@ -1,41 +1,61 @@
-from django.contrib.auth.mixins import LoginRequiredMixin
+
 from django.db.models import Sum
+from django.urls import reverse
 from django.shortcuts import redirect
 from rest_framework import generics, status, views
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
 from api import serializers
 from api.serializers import PostSerializer
 
 from .models import Post
+from .mixins import GetObjectView, UpdateObjectView
 
 
 def home_view(request):
-    return redirect('/posts')
+    return redirect(reverse('post_list'))
 
 
-class PostListView(LoginRequiredMixin, generics.ListAPIView, generics.CreateAPIView):
+class PostListView(generics.ListAPIView, generics.CreateAPIView):
     model = Post
     serializer_class = PostSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def perform_create(self, serializer):
+        try:
+            data = serializer.data
+            post = Post(
+                title=data.get('title'),
+                content=data.get('content'),
+                author=data.get('author'),
+            )
+            post.save()
+            return post
+        except Exception as e:
+            print(e)
+            return False
 
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         if serializer.is_valid():
-            self.perform_create(serializer)
-            return Response({
-                "responseCode": 100,
-                "message": "Post Created Successfully",
-                "data": serializer.data
-            }, status=status.HTTP_201_CREATED)
-        else:
-            return Response({
-                "responseCode": 103,
-                "message": "Error Creating Post",
-                "errors": serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
+            post = self.perform_create(serializer)
+            if post:
+                serializer = self.get_serializer(post)
+                return Response({
+                    "responseCode": 100,
+                    "message": "Post Created Successfully",
+                    "data": serializer.data
+                }, status=status.HTTP_201_CREATED)
+
+        return Response({
+            "responseCode": 103,
+            "message": "Error Creating Post",
+            "errors": serializer.errors
+        }, status=status.HTTP_400_BAD_REQUEST)
 
     def get_queryset(self):
-        return self.model.objects.all()
+        return self.model.valid_objects.all()
 
     def get(self, request, *args, **kwargs):
         return Response({
@@ -45,64 +65,38 @@ class PostListView(LoginRequiredMixin, generics.ListAPIView, generics.CreateAPIV
         })
 
 
-class PostDetailView(LoginRequiredMixin, generics.RetrieveAPIView, generics.UpdateAPIView):
+class PostDetailView(GetObjectView, UpdateObjectView, generics.UpdateAPIView):
     model = Post
     serializer_class = PostSerializer
+    partial_update = True
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request, *args, **kwargs):
-        instance = self.get_queryset()
-        if instance:
-            serializer = self.serializer_class(instance)
-            return Response({
-                "responseCode": 100,
-                "message": "Posts Detail",
-                "data": serializer.data
-            })
-        else:
-            return Response({
-                "responseCode": 103,
-                "message": "Post Not Found."
-            }, status=status.HTTP_404_NOT_FOUND)
+        return super().get(request, *args, **kwargs)
 
     def get_queryset(self):
         try:
-            return Post.objects.get(author=self.kwargs['author'], slug=self.kwargs['slug'])
+            return self.model.valid_objects.get(author=self.kwargs['author'], slug=self.kwargs['slug'])
         except Post.DoesNotExist:
             return None
 
     def post(self, request, *args, **kwargs):
-        instance = self.get_queryset()
-        if not instance:
-            return Response({
-                "responseCode": 103,
-                "message": "Post Not Found"
-            }, status=status.HTTP_404_NOT_FOUND)
-
-        serializer = self.get_serializer(
-            instance, data=request.data, partial=True)
-
-        if serializer.is_valid():
-            self.perform_update(serializer)
-            return Response({
-                "responseCode": 100,
-                "message": "Post Updated successfully",
-                "data": serializer.data
-            })
-        else:
-            return Response({
-                "responseCode": 103,
-                "message": "Error Updating Post",
-                "errors": serializer.errors
-            }, status=status.HTTP_400_BAD_REQUEST)
+        return super().post(request, *args, **kwargs)
 
     def delete(self, request, *args, **kwargs):
         instance = self.get_queryset()
         if instance:
-            instance.delete()
-            return Response({
-                "responseCode": 100,
-                "message": "Post Deleted!"
-            })
+            if instance.author == request.user.username:
+                instance.delete()
+                return Response({
+                    "responseCode": 100,
+                    "message": "Post Deleted!"
+                })
+            else:
+                return Response({
+                    "responseCode": 103,
+                    "message": "You cant delete posts you did not write."
+                }, status=400)
         else:
             return Response({
                 "responseCode": 103,
@@ -110,12 +104,13 @@ class PostDetailView(LoginRequiredMixin, generics.RetrieveAPIView, generics.Upda
             })
 
 
-class PostAuthorView(LoginRequiredMixin, views.APIView):
+class PostAuthorView(views.APIView):
     model = Post
     serializer_class = PostSerializer
+    permission_classes = (IsAuthenticated,)
 
     def get(self, request, *args, **kwargs):
-        author_posts = Post.objects.filter(author=self.kwargs['author'])
+        author_posts = Post.valid_objects.filter(author=self.kwargs['author'])
         serializer = self.serializer_class(author_posts, many=True)
 
         return Response({

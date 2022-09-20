@@ -10,8 +10,8 @@ class PostSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Post
-        fields = ['id', 'title', 'content', 'author', 'slug',
-                  'get_absolute_url', 'created', 'updated']
+        fields = ['id', 'title', 'content',
+                  'author', 'slug', 'created', 'updated']
         validators = [
             UniqueTogetherValidator(
                 message='You already have another post with this title',

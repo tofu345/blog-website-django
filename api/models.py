@@ -1,6 +1,10 @@
+from django.contrib.auth.models import AbstractUser
 from django.db import models
 from django.template.defaultfilters import slugify
 from django.urls import reverse
+from django.utils import timezone
+
+from .managers import CustomUserManager
 
 
 class PostManager(models.Manager):
@@ -31,3 +35,22 @@ class Post(models.Model):
     class Meta:
         ordering = ['-updated']
         unique_together = ['slug', 'author']
+
+
+class User(AbstractUser):
+    first_name = models.CharField(max_length=50)
+    last_name = models.CharField(max_length=50)
+    username = models.CharField(max_length=30, unique=True)
+    email = models.EmailField(
+        'email address', unique=True, blank=True, null=True)
+    is_staff = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=True)
+    date_joined = models.DateTimeField(default=timezone.now)
+    image = models.ImageField(upload_to='blog', blank=True, null=True)
+
+    USERNAME_FIELD = 'username'
+
+    objects = CustomUserManager()
+
+    def __str__(self):
+        return self.username

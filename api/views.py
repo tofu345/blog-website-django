@@ -1,16 +1,14 @@
 
 from django.db.models import Sum
-from django.urls import reverse
 from django.shortcuts import redirect
+from django.urls import reverse
 from rest_framework import generics, status, views
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 
-from api import serializers
-from api.serializers import PostSerializer
-
-from .models import Post
 from .mixins import GetObjectView, UpdateObjectView
+from .models import Post, User
+from .serializers import PostSerializer, UserSerializer
 
 
 def home_view(request):
@@ -43,13 +41,11 @@ class PostListView(generics.ListAPIView, generics.CreateAPIView):
             if post:
                 serializer = self.get_serializer(post)
                 return Response({
-                    "responseCode": 100,
                     "message": "Post Created Successfully",
                     "data": serializer.data
                 }, status=status.HTTP_201_CREATED)
 
         return Response({
-            "responseCode": 103,
             "message": "Error Creating Post",
             "errors": serializer.errors
         }, status=status.HTTP_400_BAD_REQUEST)
@@ -59,7 +55,6 @@ class PostListView(generics.ListAPIView, generics.CreateAPIView):
 
     def get(self, request, *args, **kwargs):
         return Response({
-            "responseCode": 100,
             "message": "Posts List",
             "data": super().list(request, *args, **kwargs).data
         })
@@ -88,20 +83,11 @@ class PostDetailView(GetObjectView, UpdateObjectView, generics.UpdateAPIView):
         if instance:
             if instance.author == request.user.username:
                 instance.delete()
-                return Response({
-                    "responseCode": 100,
-                    "message": "Post Deleted!"
-                })
+                return Response({"message": "Post Deleted!"})
             else:
-                return Response({
-                    "responseCode": 103,
-                    "message": "You cant delete posts you did not write."
-                }, status=400)
+                return Response({"message": "You cant delete posts you did not write."}, status=status.HTTP_400_BAD_REQUEST)
         else:
-            return Response({
-                "responseCode": 103,
-                "message": "Post not found. Perhaps its been deleted?"
-            })
+            return Response({"message": "Post not found. Perhaps its been deleted?"})
 
 
 class PostAuthorView(views.APIView):
@@ -114,9 +100,17 @@ class PostAuthorView(views.APIView):
         serializer = self.serializer_class(author_posts, many=True)
 
         return Response({
-            "responseCode": 100,
-            "data": {
-                "post_count": author_posts.count(),
-                "posts": serializer.data
-            }
+            "message": f"Posts by {self.kwargs['author']}",
+            "data": {"post_count": author_posts.count(), "posts": serializer.data}
         })
+
+
+class UserInfoView(views.APIView):
+    model = User
+    serializer_class = UserSerializer
+    permission_classes = (IsAuthenticated,)
+
+    def get(self, request):
+        serializer = self.serializer_class(
+            request.user, context={"request": request})
+        return Response({"message": "User Information", "data": serializer.data})

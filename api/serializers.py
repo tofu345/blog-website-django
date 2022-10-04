@@ -1,7 +1,7 @@
-from rest_framework.validators import UniqueTogetherValidator
 from rest_framework import serializers
+from rest_framework.validators import UniqueTogetherValidator
 
-from api.models import Post
+from api.models import Post, User
 
 
 class PostSerializer(serializers.ModelSerializer):
@@ -19,3 +19,9 @@ class PostSerializer(serializers.ModelSerializer):
                 fields=['title', 'author']
             )
         ]
+
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['username', 'email', 'image', 'date_joined']
